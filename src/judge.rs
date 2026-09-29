@@ -66,15 +66,15 @@ pub fn message(ev: &Event, label: &str) -> String {
     let body = match ev {
         Event::Started { now_mmh, stop_at } => {
             let when = match stop_at {
-                Some(t) => format!("**{}ごろ止む見込み**です。", hhmm(t)),
-                None => "**1時間以内には止まない見込み**です。".to_string(),
+                Some(t) => format!("**{}ごろまで降りそう**です。", hhmm(t)),
+                None => "**しばらく降り続けます**。".to_string(),
             };
-            format!("☔ {label}で雨が降ってきました（{}）。{when}", strength(*now_mmh))
+            format!("☔ {label}で雨が降ってきました（いま{}）。{when}", strength(*now_mmh))
         }
         Event::Stopped { next_start } => {
             let when = match next_start {
-                Some(t) => format!("**{}ごろまた降り出す見込み**です。", hhmm(t)),
-                None => "**1時間以内は降らない見込み**です。".to_string(),
+                Some(t) => format!("**{}ごろまた降り出しそう**です。", hhmm(t)),
+                None => "**しばらく降らない見込み**です。".to_string(),
             };
             format!("🌤 {label}の雨が止みました。{when}")
         }
@@ -220,8 +220,8 @@ mod tests {
     #[test]
     fn messages() {
         let m = message(&Event::Started { now_mmh: 1.5, stop_at: Some("202609292240".into()) }, "自宅まわり");
-        assert!(m.starts_with("☔ 自宅まわりで雨が降ってきました（弱い雨）。**22:40ごろ止む見込み**です。"));
+        assert!(m.starts_with("☔ 自宅まわりで雨が降ってきました（いま弱い雨）。**22:40ごろまで降りそう**です。"));
         let m = message(&Event::Stopped { next_start: None }, "自宅まわり");
-        assert!(m.contains("**1時間以内は降らない見込み**"));
+        assert!(m.contains("**しばらく降らない見込み**"));
     }
 }
