@@ -25,7 +25,7 @@ pub struct State {
 
 #[derive(Debug, PartialEq)]
 pub enum Event {
-    /// 降り始めた。stop_at は予測で最初に止む時刻（60 分以内に止まなければ None）
+    /// 降り始めた。stop_at は予測で止んだまま最後まで続く最初の時刻（60 分以内に止まなければ None）
     Started { now_mmh: f64, stop_at: Option<String> },
     /// 止んだ。next_start は予測で次に降り出す時刻（60 分以内に降らなければ None）
     Stopped { next_start: Option<String> },
@@ -52,7 +52,7 @@ pub fn decide(prev: Option<&State>, s: &Series, r: &Rules) -> (State, Option<Eve
 
     if !prev.raining && cooled && last_n_all(&s.observed, r.start_count, |v| v >= r.start_mmh) {
         let now_mmh = s.observed.last().map_or(0.0, |p| p.mmh);
-        let stop_at = first_time(&s.forecast, |v| v < r.stop_mmh);
+        let stop_at = settled_from(&s.forecast, |v| v < r.stop_mmh);
         return (switched, Some(Event::Started { now_mmh, stop_at }));
     }
     if prev.raining && cooled && last_n_all(&s.observed, r.stop_count, |v| v < r.stop_mmh) {
@@ -95,6 +95,13 @@ fn strength(mmh: f64) -> &'static str {
 
 fn last_n_all(points: &[Point], n: usize, pred: impl Fn(f64) -> bool) -> bool {
     n > 0 && points.len() >= n && points[points.len() - n..].iter().all(|p| pred(p.mmh))
+}
+
+/// 一瞬弱まってまた降る予測で「止む」と言わないよう、そこから予測の終わりまでずっと
+/// 条件を満たす最初の時刻を返す
+fn settled_from(points: &[Point], pred: impl Fn(f64) -> bool) -> Option<String> {
+    let run = points.iter().rev().take_while(|p| pred(p.mmh)).count();
+    (run > 0).then(|| points[points.len() - run].time.clone())
 }
 
 fn first_time(points: &[Point], pred: impl Fn(f64) -> bool) -> Option<String> {
@@ -160,6 +167,18 @@ mod tests {
         assert!(st.raining);
         assert_eq!(st.changed_at, "202609292210");
         assert_eq!(ev, Some(Event::Started { now_mmh: 1.5, stop_at: Some("202609292220".into()) }));
+    }
+
+    #[test]
+    fn brief_lull_is_not_a_stop() {
+        // 22:20 に一瞬弱まるが 22:25 にまた降る予測。止むのは 22:30 から
+        let s = series(&[0.0, 1.2, 1.5], &[0.65, 0.45, 2.13, 0.3, 0.0]);
+        let (_, ev) = decide(Some(&dry_since("202609291800")), &s, &rules());
+        assert_eq!(ev, Some(Event::Started { now_mmh: 1.5, stop_at: Some("202609292230".into()) }));
+
+        let s = series(&[0.0, 1.2, 1.5], &[0.45, 2.13, 1.45]);
+        let (_, ev) = decide(Some(&dry_since("202609291800")), &s, &rules());
+        assert_eq!(ev, Some(Event::Started { now_mmh: 1.5, stop_at: None }));
     }
 
     #[test]
