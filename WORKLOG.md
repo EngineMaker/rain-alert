@@ -91,3 +91,4 @@
 - 2026-09-30 Cosense ページ（https://scrapbox.io/EngineMaker/雨のお告げ）を agent-browser で更新。ユーザーが手で直した箇所（アイコンを Cosense にアップロードした画像に差し替え、`[mktoho.icon]`、「105のサーバー」）は残し、通知文の例・掲示板の説明だけ差し替えた。`docs/cosense.txt` もページと同じ内容に合わせた
   - ログイン: em105 にリモートデスクトップ（xrdp、DISPLAY :11）で入ってもらい、`agent-browser --session cosense --restore --headed` のウィンドウでユーザーが Google ログイン（アカウント mktoho）。状態は保存済みで、以後は画面なしで使える
   - 書き込み方法: インポート API は管理者専用で 403。合成の paste イベントは無視される。**編集画面で Ctrl+A → `keyboard inserttext` で全文を流し込む**と保存された（API で本文を読み直して完全一致を確認）
+- 2026-09-30 signboard の API 変更（D-036: 期限切れのお知らせへの PATCH は 404「お知らせは期限切れです」）に対応。障害で延長が間に合わず期限切れになると、404 を「手で消された」と取り違えてその雨の間表示しなくなるため、PATCH の前に自分の覚えている期限を見て、切れていれば POST し直すようにした（テスト 16 件）

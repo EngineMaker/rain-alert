@@ -3,6 +3,7 @@
 //!
 //! POST するたびに掲示板で 5 分間光るので、POST は雨ごとに 1 回だけにして、あとは PATCH で期限を延ばす。
 //! 条件が外れたら何もしない（期限が来て自然に消える）。手で消されたら、その雨の間はもう出さない。
+//! 期限切れのお知らせへの PATCH は 404 になる（signboard D-036）ので、期限切れなら PATCH せず POST し直す。
 
 use serde::{Deserialize, Serialize};
 
@@ -65,6 +66,9 @@ pub fn plan(board: Option<&Board>, want: Option<String>, now_ms: i64, hold_min: 
         (Some(_), None) => Action::Forget,
         (None, Some(body)) => Action::Post { body, expires_at_ms },
         (Some(b), Some(_)) if b.suppressed => Action::None,
+        // 障害などで延長が間に合わず期限が切れていたら、PATCH は 404（期限切れ）になるので新しく出し直す。
+        // 手で消されたときの 404 と取り違えないよう、PATCH する前に自分で判定する（時計のずれに 30 秒の余裕）
+        (Some(b), Some(body)) if b.expires_at_ms - now_ms < 30_000 => Action::Post { body, expires_at_ms },
         (Some(b), Some(body)) => {
             let changed = b.body != body;
             // 監査ログを増やしすぎないよう、残りが半分を切ったときか本文が変わったときだけ延ばす
@@ -206,6 +210,15 @@ mod tests {
         assert_eq!(
             plan(Some(&board("a", now + hold)), Some("b".into()), now, 20),
             Action::Patch { id: 7, body: Some("b".into()), expires_at_ms: now + hold }
+        );
+    }
+
+    #[test]
+    fn reposts_when_our_notice_has_expired() {
+        let now = 1_000_000;
+        assert_eq!(
+            plan(Some(&board("a", now - 60_000)), Some("a".into()), now, 20),
+            Action::Post { body: "a".into(), expires_at_ms: now + 20 * 60_000 }
         );
     }
 
