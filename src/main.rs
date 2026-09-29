@@ -3,6 +3,7 @@
 
 mod config;
 mod judge;
+mod signboard;
 mod yahoo;
 
 use std::fs;
@@ -38,8 +39,30 @@ fn run() -> Result<(), String> {
     }
 
     fs::create_dir_all(&cfg.data_dir).map_err(|e| format!("データ用ディレクトリを作れない: {e}"))?;
+    if let Some(sb) = &cfg.signboard {
+        // 掲示板の失敗で Discord 側の状態保存まで止めない
+        if let Err(e) = update_signboard(sb, &cfg, &series, next.raining) {
+            eprintln!("rain-alert: {e}");
+        }
+    }
     append_log(&cfg.data_dir, &series, &next, event.as_ref(), message.as_deref(), cfg.dry_run)?;
     save_state(&state_path, &next)
+}
+
+fn update_signboard(sb: &signboard::Settings, cfg: &Config, series: &yahoo::Series, raining: bool) -> Result<(), String> {
+    let path = Path::new(&cfg.data_dir).join("signboard.json");
+    let board: Option<signboard::Board> = fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str(&t).ok());
+    let want = signboard::wanted_body(raining, series, &cfg.rules, sb.lead_min);
+    let action = signboard::plan(board.as_ref(), want, signboard::now_ms(), sb.hold_min);
+    let next = signboard::apply(sb, board.as_ref(), action, cfg.dry_run)?;
+    match next {
+        Some(b) => fs::write(&path, serde_json::to_string_pretty(&b).map_err(|e| e.to_string())?)
+            .map_err(|e| format!("掲示板の状態を書けない: {e}")),
+        None => match fs::remove_file(&path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(format!("掲示板の状態を消せない: {e}")),
+            _ => Ok(()),
+        },
+    }
 }
 
 fn load_state(path: &Path) -> Option<State> {

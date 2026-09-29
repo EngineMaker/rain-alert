@@ -83,7 +83,7 @@ pub fn message(ev: &Event, label: &str) -> String {
 }
 
 /// 気象庁「雨の強さと降り方」の区分をくだけた言い方にしたもの
-fn strength(mmh: f64) -> &'static str {
+pub(crate) fn strength(mmh: f64) -> &'static str {
     match mmh {
         v if v < 3.0 => "弱い雨",
         v if v < 10.0 => "やや強めの雨",
@@ -99,7 +99,7 @@ fn last_n_all(points: &[Point], n: usize, pred: impl Fn(f64) -> bool) -> bool {
 
 /// 一瞬弱まってまた降る予測で「止む」と言わないよう、そこから予測の終わりまでずっと
 /// 条件を満たす最初の時刻を返す
-fn settled_from(points: &[Point], pred: impl Fn(f64) -> bool) -> Option<String> {
+pub(crate) fn settled_from(points: &[Point], pred: impl Fn(f64) -> bool) -> Option<String> {
     let run = points.iter().rev().take_while(|p| pred(p.mmh)).count();
     (run > 0).then(|| points[points.len() - run].time.clone())
 }
@@ -108,12 +108,12 @@ fn first_time(points: &[Point], pred: impl Fn(f64) -> bool) -> Option<String> {
     points.iter().find(|p| pred(p.mmh)).map(|p| p.time.clone())
 }
 
-fn hhmm(t: &str) -> String {
+pub(crate) fn hhmm(t: &str) -> String {
     format!("{}:{}", &t[8..10], &t[10..12])
 }
 
 /// "YYYYMMDDHHMM" を通算の分に直す（差を取るだけなので基準日は任意）
-fn minutes(t: &str) -> i64 {
+pub(crate) fn minutes(t: &str) -> i64 {
     let n = |a: usize, b: usize| t.get(a..b).and_then(|x| x.parse::<i64>().ok()).unwrap_or(0);
     let (y, m, d) = (n(0, 4), n(4, 6), n(6, 8));
     days_from_civil(y, m, d) * 1440 + n(8, 10) * 60 + n(10, 12)

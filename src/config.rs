@@ -5,6 +5,7 @@ use std::env;
 use std::fs;
 
 use crate::judge::Rules;
+use crate::signboard;
 
 pub struct Config {
     pub appid: String,
@@ -15,6 +16,8 @@ pub struct Config {
     pub data_dir: String,
     pub dry_run: bool,
     pub rules: Rules,
+    /// SIGNBOARD_API_KEY が空なら None（掲示板と連携しない）
+    pub signboard: Option<signboard::Settings>,
 }
 
 impl Config {
@@ -36,6 +39,15 @@ impl Config {
                 stop_mmh: num("RAIN_STOP_MMH", 0.5)?,
                 stop_count: num("RAIN_STOP_COUNT", 3.0)? as usize,
                 cooldown_min: num("COOLDOWN_MIN", 30.0)? as i64,
+            },
+            signboard: match opt("SIGNBOARD_API_KEY", "") {
+                key if key.is_empty() => None,
+                api_key => Some(signboard::Settings {
+                    base_url: opt("SIGNBOARD_URL", "https://signboard.emaker.dev/api/v1"),
+                    api_key,
+                    lead_min: num("SIGNBOARD_LEAD_MIN", 30.0)? as i64,
+                    hold_min: num("SIGNBOARD_HOLD_MIN", 20.0)? as i64,
+                }),
             },
         })
     }
