@@ -1,4 +1,5 @@
 雨のお告げ
+[https://raw.githubusercontent.com/EngineMaker/rain-alert/main/assets/icon.png]
 [* シェアハウスのまわりで雨が降り始めたら・止んだら、Discord でお知らせしてくれる仕組み]
  EngineMakerβ版 の Discord に「雨のお告げ」という名前で投稿されます
 
