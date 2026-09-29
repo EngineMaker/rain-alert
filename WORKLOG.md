@@ -96,3 +96,4 @@
   - `bosai/jmatile/data/rasrf/targetTimes.json` の時刻は UTC。1〜6時間先は 10 分ごと発表の `member=immed`、7〜15時間先は毎正時発表の `member=none`。タイルは `rasrf/{basetime}/{member}/{validtime}/surf/rasrf/{z}/{x}/{y}.png`、z=10 で取れた（z=12 は透明）
   - 色→雨量の対応は凡例の色で近似（1mm未満 #F2F2FF、1〜5 #A0D2FF、5〜10 #218CFF、10〜20 #0041FF、20〜30 #FAF500、30〜50 #FF9900、50〜80 #FF2800、80以上 #B40068）。今回の色はすべて凡例とほぼ一致した
   - 結果: 04:20 ごろまで 1〜5mm/時、04:20〜05:20 に 1mm 未満、05:20 以降は雨なし（08 時台に 1mm 未満のぱらつき）
+- 2026-09-30 signboard D-037（404 に理由の `code`: not_found / deleted / expired）に対応。PATCH が 404 のとき、`deleted` ならその雨の間は出さない、`expired`・`not_found` ならその場で POST し直す。PATCH 前の期限チェックも残した（期限切れ PATCH で監査ログを増やさないため）。実データで PATCH 成功を確認

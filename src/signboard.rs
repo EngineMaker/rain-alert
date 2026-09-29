@@ -3,7 +3,7 @@
 //!
 //! POST するたびに掲示板で 5 分間光るので、POST は雨ごとに 1 回だけにして、あとは PATCH で期限を延ばす。
 //! 条件が外れたら何もしない（期限が来て自然に消える）。手で消されたら、その雨の間はもう出さない。
-//! 期限切れのお知らせへの PATCH は 404 になる（signboard D-036）ので、期限切れなら PATCH せず POST し直す。
+//! PATCH の 404 は理由の code で分ける（signboard D-037）: deleted（手で消された）なら出さない、expired・not_found なら出し直す。
 
 use serde::{Deserialize, Serialize};
 
@@ -87,18 +87,7 @@ pub fn apply(cfg: &Settings, board: Option<&Board>, action: Action, dry_run: boo
     match action {
         Action::None => Ok(board.cloned()),
         Action::Forget => Ok(None),
-        Action::Post { body, expires_at_ms } => {
-            if dry_run {
-                println!("[DRY_RUN] signboard POST: {body}");
-                return Ok(None);
-            }
-            let res = send(cfg, "POST", "/notices", &serde_json::json!({ "body": body, "expiresAt": expires_at_ms }))?;
-            let id = res
-                .and_then(|v| v["notice"]["id"].as_u64())
-                .ok_or("signboard の POST 応答に notice.id がない")?;
-            println!("[SIGNBOARD] POST #{id}: {body}");
-            Ok(Some(Board { id, body, expires_at_ms, suppressed: false }))
-        }
+        Action::Post { body, expires_at_ms } => post(cfg, body, expires_at_ms, dry_run),
         Action::Patch { id, body, expires_at_ms } => {
             let prev = board.cloned().ok_or("PATCH なのに Board がない")?;
             if dry_run {
@@ -110,39 +99,67 @@ pub fn apply(cfg: &Settings, board: Option<&Board>, action: Action, dry_run: boo
                 payload["body"] = serde_json::json!(b);
             }
             match send(cfg, "PATCH", &format!("/notices/{id}"), &payload)? {
-                // 404: 管理画面から消された
-                None => {
+                Reply::Ok(_) => {
+                    println!("[SIGNBOARD] PATCH #{id}");
+                    Ok(Some(Board { id, body: body.unwrap_or(prev.body), expires_at_ms, suppressed: false }))
+                }
+                // 手で消された → この雨の間はもう出さない
+                Reply::NotFound(code) if code == "deleted" => {
                     println!("[SIGNBOARD] #{id} は消されていたので、この雨の間は出さない");
                     Ok(Some(Board { suppressed: true, ..prev }))
                 }
-                Some(_) => {
-                    println!("[SIGNBOARD] PATCH #{id}");
-                    Ok(Some(Board { id, body: body.unwrap_or(prev.body), expires_at_ms, suppressed: false }))
+                // 期限切れ（expired）や、ID が無い（not_found）→ 新しく出し直す
+                Reply::NotFound(code) => {
+                    println!("[SIGNBOARD] #{id} は {code} なので出し直す");
+                    post(cfg, body.unwrap_or(prev.body), expires_at_ms, false)
                 }
             }
         }
     }
 }
 
-/// 404 は Ok(None)、それ以外の失敗は Err
-fn send(cfg: &Settings, method: &str, path: &str, body: &serde_json::Value) -> Result<Option<serde_json::Value>, String> {
+fn post(cfg: &Settings, body: String, expires_at_ms: i64, dry_run: bool) -> Result<Option<Board>, String> {
+    if dry_run {
+        println!("[DRY_RUN] signboard POST: {body}");
+        return Ok(None);
+    }
+    let payload = serde_json::json!({ "body": body, "expiresAt": expires_at_ms });
+    let Reply::Ok(res) = send(cfg, "POST", "/notices", &payload)? else {
+        return Err("signboard の POST が 404".into());
+    };
+    let id = res["notice"]["id"].as_u64().ok_or("signboard の POST 応答に notice.id がない")?;
+    println!("[SIGNBOARD] POST #{id}: {body}");
+    Ok(Some(Board { id, body, expires_at_ms, suppressed: false }))
+}
+
+enum Reply {
+    Ok(serde_json::Value),
+    /// 404。中身は理由の code（not_found / deleted / expired。signboard D-037）
+    NotFound(String),
+}
+
+/// 2xx と 404 以外は Err
+fn send(cfg: &Settings, method: &str, path: &str, body: &serde_json::Value) -> Result<Reply, String> {
     let url = format!("{}{path}", cfg.base_url.trim_end_matches('/'));
     let auth = format!("Bearer {}", cfg.api_key);
+    // 404 の本文（code）を読むため、エラー応答も Ok で受け取る
+    let agent: ureq::Agent = ureq::Agent::config_builder().http_status_as_error(false).build().into();
     let req = match method {
-        "POST" => ureq::post(&url),
-        _ => ureq::patch(&url),
+        "POST" => agent.post(&url),
+        _ => agent.patch(&url),
     };
-    let result = req
+    let mut res = req
         .header("Authorization", &auth)
         .header("Content-Type", "application/json")
-        .send(body.to_string());
-    match result {
-        Ok(mut res) => {
-            let text = res.body_mut().read_to_string().map_err(|e| format!("signboard の応答を読めない: {e}"))?;
-            serde_json::from_str(&text).map(Some).map_err(|e| format!("signboard の応答が想定外: {e}"))
-        }
-        Err(ureq::Error::StatusCode(404)) => Ok(None),
-        Err(e) => Err(format!("signboard {method} {path} に失敗: {e}")),
+        .send(body.to_string())
+        .map_err(|e| format!("signboard {method} {path} に失敗: {e}"))?;
+    let status = res.status().as_u16();
+    let text = res.body_mut().read_to_string().map_err(|e| format!("signboard の応答を読めない: {e}"))?;
+    let json: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
+    match status {
+        200..=299 => Ok(Reply::Ok(json)),
+        404 => Ok(Reply::NotFound(json["code"].as_str().unwrap_or("not_found").to_string())),
+        _ => Err(format!("signboard {method} {path} が {status}: {}", json["error"].as_str().unwrap_or(&text))),
     }
 }
 
