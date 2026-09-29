@@ -16,7 +16,7 @@ Discord の Webhook に通知する小さなツール。
 
 - [Yahoo! 気象情報 API](https://developer.yahoo.co.jp/webapi/map/openlocalplatform/v1/weather.html) から、地点の降水強度の実測と 60 分先までの予測（5 分刻み）を取る
 - 実測が「1 mm/h 以上 × 2 回連続」で降り始め、「0.5 mm/h 未満 × 3 回連続」で止みと判定。状態が変わってから 30 分は逆向きに変えない（ぱらつきで通知が連発しないように）
-- 予定時刻は予測の中で最初に切り替わる時刻。**予測は 60 分先までしかない**ので、それより先は「しばらく降り続けます」などと出す
+- 予定時刻は予測の中で最初に切り替わる時刻。Yahoo! の予測は 60 分先までなので、それより先は[気象庁 降水短時間予報](https://www.jma.go.jp/jma/kishou/know/kurashi/kotan_nowcast.html)（15 時間先まで・1 時間ごと）の地図タイルの色を読んで「5時ごろまでに止みそう」「次は8時ごろから降りそう」と目安を出す。どちらにも次の予報が無いときだけ「しばらく降り続けます」「しばらく降らない見込みです」と出す
 - 常駐せず、systemd timer で 5 分ごとに 1 回起動して終了する（Rust 製、バイナリ約 1.7MB、実行時メモリ約 4MB）
 
 ## リビングの電光掲示板（signboard）への表示
@@ -51,4 +51,4 @@ journalctl --user -u rain-alert.service   # ログ
 
 ## クレジット
 
-気象情報: Web Services by Yahoo! JAPAN
+気象情報: Web Services by Yahoo! JAPAN、気象庁「降水短時間予報」を加工して作成

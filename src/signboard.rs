@@ -40,7 +40,7 @@ pub enum Action {
 }
 
 /// 表示したい本文。表示しないなら None
-pub fn wanted_body(raining: bool, s: &Series, r: &Rules, lead_min: i64) -> Option<String> {
+pub fn wanted_body(raining: bool, s: &Series, r: &Rules, lead_min: i64, stop_hour: Option<u32>) -> Option<String> {
     if raining {
         let now_mmh = s.observed.last().map_or(0.0, |p| p.mmh);
         let stop = judge::settled_from(&s.forecast, |v| v < r.stop_mmh);
@@ -48,7 +48,10 @@ pub fn wanted_body(raining: bool, s: &Series, r: &Rules, lead_min: i64) -> Optio
         let strength = judge::strength(now_mmh);
         return Some(match stop {
             Some(t) => format!("☔ {}ごろまで雨（いま{strength}）", judge::hhmm(&t)),
-            None => format!("☔ 雨がしばらく降り続けます（いま{strength}）"),
+            None => match stop_hour {
+                Some(h) => format!("☔ {h}時ごろまで雨（いま{strength}）"),
+                None => format!("☔ 雨がしばらく降り続けます（いま{strength}）"),
+            },
         });
     }
     let now = judge::minutes(&s.now);
@@ -195,20 +198,22 @@ mod tests {
 
     #[test]
     fn body_while_raining() {
-        let b = wanted_body(true, &series(1.5, &[1.0, 0.3, 0.0]), &rules(), 30).unwrap();
+        let b = wanted_body(true, &series(1.5, &[1.0, 0.3, 0.0]), &rules(), 30, None).unwrap();
         assert_eq!(b, "☔ 22:20ごろまで雨（いま弱い雨）");
-        let b = wanted_body(true, &series(1.5, &[1.0, 0.3, 2.0]), &rules(), 30).unwrap();
+        let b = wanted_body(true, &series(1.5, &[1.0, 0.3, 2.0]), &rules(), 30, None).unwrap();
         assert_eq!(b, "☔ 雨がしばらく降り続けます（いま弱い雨）");
+        let b = wanted_body(true, &series(1.5, &[1.0, 0.3, 2.0]), &rules(), 30, Some(5)).unwrap();
+        assert_eq!(b, "☔ 5時ごろまで雨（いま弱い雨）");
     }
 
     #[test]
     fn body_when_rain_is_near() {
         // 22:35 に降り出す予測（25 分後）→ 表示
         let s = series(0.0, &[0.0, 0.0, 0.0, 0.0, 2.0]);
-        assert_eq!(wanted_body(false, &s, &rules(), 30).unwrap(), "🌂 22:35ごろ雨が降り出しそう");
+        assert_eq!(wanted_body(false, &s, &rules(), 30, None).unwrap(), "🌂 22:35ごろ雨が降り出しそう");
         // 30 分より先なら表示しない
         let s = series(0.0, &[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0]);
-        assert_eq!(wanted_body(false, &s, &rules(), 30), None);
+        assert_eq!(wanted_body(false, &s, &rules(), 30, None), None);
     }
 
     #[test]

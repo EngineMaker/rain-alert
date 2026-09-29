@@ -2,6 +2,7 @@
 //! systemd timer から 5 分ごとに 1 回起動され、判定して終了するワンショット実行。
 
 mod config;
+mod jma;
 mod judge;
 mod signboard;
 mod yahoo;
@@ -11,7 +12,7 @@ use std::io::Write;
 use std::path::Path;
 
 use config::Config;
-use judge::{Event, State};
+use judge::{Event, Outlook, State};
 
 fn main() {
     if let Err(e) = run() {
@@ -28,7 +29,9 @@ fn run() -> Result<(), String> {
     let prev = load_state(&state_path);
     let (next, event) = judge::decide(prev.as_ref(), &series, &cfg.rules);
 
-    let message = event.as_ref().map(|ev| judge::message(ev, &cfg.label));
+    fs::create_dir_all(&cfg.data_dir).map_err(|e| format!("データ用ディレクトリを作れない: {e}"))?;
+    let outlook = outlook(&cfg, &series, &next, event.as_ref());
+    let message = event.as_ref().map(|ev| judge::message(ev, &cfg.label, outlook));
     if let Some(msg) = &message {
         if cfg.dry_run {
             println!("[DRY_RUN] {msg}");
@@ -38,10 +41,9 @@ fn run() -> Result<(), String> {
         }
     }
 
-    fs::create_dir_all(&cfg.data_dir).map_err(|e| format!("データ用ディレクトリを作れない: {e}"))?;
     if let Some(sb) = &cfg.signboard {
         // 掲示板の失敗で Discord 側の状態保存まで止めない
-        if let Err(e) = update_signboard(sb, &cfg, &series, next.raining) {
+        if let Err(e) = update_signboard(sb, &cfg, &series, next.raining, outlook.stop_hour) {
             eprintln!("rain-alert: {e}");
         }
     }
@@ -49,10 +51,45 @@ fn run() -> Result<(), String> {
     save_state(&state_path, &next)
 }
 
-fn update_signboard(sb: &signboard::Settings, cfg: &Config, series: &yahoo::Series, raining: bool) -> Result<(), String> {
+/// Yahoo! の 60 分先までで止む・降り出す時刻が出ないときだけ、気象庁の 15 時間先までの予報を見る
+fn outlook(cfg: &Config, series: &yahoo::Series, state: &State, event: Option<&Event>) -> Outlook {
+    let yahoo_stop = judge::settled_from(&series.forecast, |v| v < cfg.rules.stop_mmh);
+    let need_stop = state.raining
+        && yahoo_stop.is_none()
+        && (cfg.signboard.is_some() || matches!(event, Some(Event::Started { .. })));
+    let need_start = matches!(event, Some(Event::Stopped { next_start: None }));
+    if !need_stop && !need_start {
+        return Outlook::default();
+    }
+    let (Ok(lat), Ok(lon)) = (cfg.lat.parse(), cfg.lon.parse()) else {
+        return Outlook::default();
+    };
+    match jma::fetch(lat, lon, &cfg.data_dir) {
+        Ok(hours) => Outlook {
+            stop_hour: if need_stop { jma::stop_hour(&hours) } else { None },
+            start_hour: match (need_start, jma::start_hint(&hours)) {
+                (true, jma::StartHint::At(h)) => Some(h),
+                _ => None,
+            },
+        },
+        // 気象庁が取れなくても通知は止めない（目安なしの文面になる）
+        Err(e) => {
+            eprintln!("rain-alert: {e}");
+            Outlook::default()
+        }
+    }
+}
+
+fn update_signboard(
+    sb: &signboard::Settings,
+    cfg: &Config,
+    series: &yahoo::Series,
+    raining: bool,
+    stop_hour: Option<u32>,
+) -> Result<(), String> {
     let path = Path::new(&cfg.data_dir).join("signboard.json");
     let board: Option<signboard::Board> = fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str(&t).ok());
-    let want = signboard::wanted_body(raining, series, &cfg.rules, sb.lead_min);
+    let want = signboard::wanted_body(raining, series, &cfg.rules, sb.lead_min, stop_hour);
     let action = signboard::plan(board.as_ref(), want, signboard::now_ms(), sb.hold_min);
     let next = signboard::apply(sb, board.as_ref(), action, cfg.dry_run)?;
     match next {

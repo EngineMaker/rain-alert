@@ -31,6 +31,15 @@ pub enum Event {
     Stopped { next_start: Option<String> },
 }
 
+/// 1 時間より先の目安（気象庁 降水短時間予報）。decide の後で必要なときだけ取って渡す
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub struct Outlook {
+    /// この時（JST）ごろまでに止みそう
+    pub stop_hour: Option<u32>,
+    /// この時（JST）ごろから降りそう
+    pub start_hour: Option<u32>,
+}
+
 impl Event {
     pub fn kind(&self) -> &'static str {
         match self {
@@ -62,24 +71,35 @@ pub fn decide(prev: Option<&State>, s: &Series, r: &Rules) -> (State, Option<Eve
     (prev.clone(), None)
 }
 
-pub fn message(ev: &Event, label: &str) -> String {
+pub fn message(ev: &Event, label: &str, outlook: Outlook) -> String {
+    let mut jma = false;
     let body = match ev {
         Event::Started { now_mmh, stop_at } => {
-            let when = match stop_at {
-                Some(t) => format!("**{}ごろまで降りそう**です。", hhmm(t)),
-                None => "**しばらく降り続けます**。".to_string(),
+            // 「しばらく〜」は次の予報がどちらにも無いときだけ
+            let when = match (stop_at, outlook.stop_hour) {
+                (Some(t), _) => format!("**{}ごろまで降りそう**です。", hhmm(t)),
+                (None, Some(h)) => {
+                    jma = true;
+                    format!("**{h}時ごろまでに止みそう**です。")
+                }
+                (None, None) => "**しばらく降り続けます**。".to_string(),
             };
             format!("☔ {label}で雨が降ってきました（いま{}）。{when}", strength(*now_mmh))
         }
         Event::Stopped { next_start } => {
-            let when = match next_start {
-                Some(t) => format!("**{}ごろまた降り出しそう**です。", hhmm(t)),
-                None => "**しばらく降らない見込み**です。".to_string(),
+            let when = match (next_start, outlook.start_hour) {
+                (Some(t), _) => format!("**{}ごろまた降り出しそう**です。", hhmm(t)),
+                (None, Some(h)) => {
+                    jma = true;
+                    format!("次は**{h}時ごろから降りそう**です。")
+                }
+                (None, None) => "**しばらく降らない見込み**です。".to_string(),
             };
             format!("🌤 {label}の雨が止みました。{when}")
         }
     };
-    format!("{body}\n-# 気象情報: Web Services by Yahoo! JAPAN")
+    let credit = if jma { "Web Services by Yahoo! JAPAN、気象庁「降水短時間予報」を加工して作成" } else { "Web Services by Yahoo! JAPAN" };
+    format!("{body}\n-# 気象情報: {credit}")
 }
 
 /// 気象庁「雨の強さと降り方」の区分をくだけた言い方にしたもの
@@ -219,9 +239,17 @@ mod tests {
 
     #[test]
     fn messages() {
-        let m = message(&Event::Started { now_mmh: 1.5, stop_at: Some("202609292240".into()) }, "自宅まわり");
+        let m = message(&Event::Started { now_mmh: 1.5, stop_at: Some("202609292240".into()) }, "自宅まわり", Outlook::default());
         assert!(m.starts_with("☔ 自宅まわりで雨が降ってきました（いま弱い雨）。**22:40ごろまで降りそう**です。"));
-        let m = message(&Event::Stopped { next_start: None }, "自宅まわり");
+        let m = message(&Event::Stopped { next_start: None }, "自宅まわり", Outlook::default());
         assert!(m.contains("**しばらく降らない見込み**"));
+        assert!(!m.contains("気象庁"));
+        // 気象庁の目安があれば「しばらく〜」は付けない
+        let o = Outlook { stop_hour: Some(5), start_hour: Some(8) };
+        let m = message(&Event::Started { now_mmh: 1.5, stop_at: None }, "自宅まわり", o);
+        assert!(m.starts_with("☔ 自宅まわりで雨が降ってきました（いま弱い雨）。**5時ごろまでに止みそう**です。"));
+        assert!(m.contains("気象庁「降水短時間予報」を加工して作成"));
+        let m = message(&Event::Stopped { next_start: None }, "自宅まわり", o);
+        assert!(m.contains("次は**8時ごろから降りそう**です。") && !m.contains("しばらく"));
     }
 }
