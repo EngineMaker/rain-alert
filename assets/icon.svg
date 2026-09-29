@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4FA3E0"/><stop offset="1" stop-color="#2E6FB8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <g fill="#BFE3FF">
+    <path d="M110 70 q12 22 0 34 q-12 -12 0 -34z" transform="scale(1.4) translate(-30,-20)"/>
+    <path d="M400 60 q12 22 0 34 q-12 -12 0 -34z" transform="translate(0,20) scale(1.2) translate(-40,0)"/>
+    <path d="M80 330 q14 26 0 40 q-14 -14 0 -40z"/>
+    <path d="M430 320 q14 26 0 40 q-14 -14 0 -40z"/>
+  </g>
+  <!-- canopy -->
+  <path d="M86 250 A170 150 0 0 1 426 250 Q397 226 369 250 Q341 226 313 250 Q284 226 256 250 Q228 226 199 250 Q171 226 143 250 Q115 226 86 250 Z" fill="#FFD84D" stroke="#1F3F66" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M256 102 Q200 170 199 250 M256 102 Q312 170 313 250" fill="none" stroke="#1F3F66" stroke-width="8"/>
+  <!-- shaft & handle -->
+  <path d="M256 250 V390 a28 28 0 0 1 -56 0" fill="none" stroke="#1F3F66" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="256" cy="96" r="10" fill="#1F3F66"/>
+</svg>

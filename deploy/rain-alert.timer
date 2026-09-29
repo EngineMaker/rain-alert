@@ -1,0 +1,10 @@
+[Unit]
+Description=rain-alert を 5 分ごとに起動
+
+[Timer]
+# Yahoo! の実測は 5 分刻みで数分遅れて出るので、少しずらして起動する
+OnCalendar=*:02/5
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

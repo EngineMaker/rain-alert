@@ -1,0 +1,11 @@
+[Unit]
+Description=rain-alert: 雨の降り始め・止みを Discord に通知（1回判定して終了）
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# .env と data/ はこのディレクトリから読む
+WorkingDirectory=%h/work/ai/rain-alert
+ExecStart=%h/work/ai/rain-alert/target/release/rain-alert
+TimeoutStartSec=60

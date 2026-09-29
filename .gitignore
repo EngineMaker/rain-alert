@@ -1,0 +1,10 @@
+/target
+.env
+/data
+*.jsonl
+
+# 私的な資料（ローカルにだけ置く）
+/request.png
+/BRIEF.md
+
+/.claude
