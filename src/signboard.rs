@@ -43,11 +43,12 @@ pub fn wanted_body(raining: bool, s: &Series, r: &Rules, lead_min: i64) -> Optio
     if raining {
         let now_mmh = s.observed.last().map_or(0.0, |p| p.mmh);
         let stop = judge::settled_from(&s.forecast, |v| v < r.stop_mmh);
-        let when = match stop {
-            Some(t) => format!("{}ごろ止む見込み", judge::hhmm(&t)),
-            None => "1時間以内には止まない見込み".to_string(),
-        };
-        return Some(format!("☔ 雨が降っています（{}）。{when}", judge::strength(now_mmh)));
+        // 掲示板は横に流れて一度に全文が見えないので、大事なこと（いつまで降るか）を先頭に置く
+        let strength = judge::strength(now_mmh);
+        return Some(match stop {
+            Some(t) => format!("☔ {}ごろまで雨（いま{strength}）", judge::hhmm(&t)),
+            None => format!("☔ 雨がしばらく降り続けます（いま{strength}）"),
+        });
     }
     let now = judge::minutes(&s.now);
     s.forecast
@@ -174,7 +175,9 @@ mod tests {
     #[test]
     fn body_while_raining() {
         let b = wanted_body(true, &series(1.5, &[1.0, 0.3, 0.0]), &rules(), 30).unwrap();
-        assert_eq!(b, "☔ 雨が降っています（弱い雨）。22:20ごろ止む見込み");
+        assert_eq!(b, "☔ 22:20ごろまで雨（いま弱い雨）");
+        let b = wanted_body(true, &series(1.5, &[1.0, 0.3, 2.0]), &rules(), 30).unwrap();
+        assert_eq!(b, "☔ 雨がしばらく降り続けます（いま弱い雨）");
     }
 
     #[test]
