@@ -11,11 +11,11 @@ Discord「EngineMakerβ版」に通知する。見るのはシェアハウスの
 | 項目 | 決定 |
 |---|---|
 | 地点 | 自宅の緯度経度 1 点（番地・座標は `.env`、リポジトリに入れない） |
-| 通知先 | EngineMakerβ版 `#sandbox` の Webhook → 良くなったら本番用チャンネルを新設して切り替え |
+| 通知先 | EngineMakerβ版 `#sandbox` の Webhook → 良くなったら本番用チャンネルを新設して切り替え（2026-09-30 `#em新宿_雑談_chat` に切り替え済み） |
 | 作り方 | 既存 `mk-discord-bot` には足さず、Webhook に投稿する小さなプログラムを別に作る |
 | 動かす場所 | em105（このマシン。systemd --user） |
 | リポジトリ | GitHub `EngineMaker/rain-alert`（public。`request.png`・`BRIEF.md` は含めない） |
-| Webhook 名・アイコン | 「雨のお告げ」／ `assets/icon.png`（黄色い傘） |
+| Webhook 名・アイコン | 「雨のお告げ」→ 本番で「雨のお知らせ」に変更／ `assets/icon.png`（黄色い傘） |
 
 ## 方式
 - **言語**: Rust（ユーザー希望。サイズとリソースを軽くする）。依存は最小限（HTTP は `ureq` + rustls、JSON は `serde_json`）。Discord は Webhook に POST するだけ
